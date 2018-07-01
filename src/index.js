@@ -3,6 +3,8 @@ import {compile} from 'ejs';
 import fs from 'fs';
 import path from 'path';
 
+let outputCommon = false;
+
 function getCssFilePath(tplFilePath, href) {
     return path.resolve(path.parse(tplFilePath).dir, href);
 }
@@ -20,7 +22,12 @@ export default function({
                             include,
                             exclude,
                             loadCss,
-                            compilerOptions = {client: true, strict: true}
+                            compilerOptions = {
+                                client: true, 
+                                strict: true,
+                                compileDebug: false,
+                                minified: true
+                            }
                         } = {}) {
     const filter = createFilter(include || ['**/*.ejs'], exclude);
 
@@ -30,10 +37,22 @@ export default function({
         transform: function transform(code, tplFilePath) {
             if (filter(tplFilePath)) {
                 const codeToCompile = loadCss ? loadCssStylesTo(code, tplFilePath) : code;
-                const templateFn = compile(codeToCompile, compilerOptions);
+                const templateFn = compile(codeToCompile, Object.assign({filename: tplFilePath}, compilerOptions));
 
+                let common = '';
+                if(!outputCommon){
+                    outputCommon = true;
+                    common = `
+(window || global).EjsHelper = {
+    escapeFn: (function(){
+        const es = ${templateFn.escapeFn.toString()};\n
+        return es;
+    })()
+};\n`;
+                }
+                
                 return {
-                    code: `export default ${templateFn.toString()};`,
+                    code: common + `export default ${templateFn.toString()};`,
                     map: {mappings: ''},
                 };
             }
